@@ -2,11 +2,11 @@ package main
 
 import "sync/atomic"
 
-type atomicBool struct {
+type AtomicBool struct {
 	value int32
 }
 
-func (b *atomicBool) Set(v bool) {
+func (b *AtomicBool) Set(v bool) {
 	if v {
 		atomic.StoreInt32(&b.value, 1)
 	} else {
@@ -14,7 +14,7 @@ func (b *atomicBool) Set(v bool) {
 	}
 }
 
-func (b *atomicBool) Get() bool {
+func (b *AtomicBool) Get() bool {
 	return atomic.LoadInt32(&b.value) == 1
 }
 
@@ -23,7 +23,7 @@ type Limiter struct {
 	pool                    chan struct{}
 	goroutineDone           chan struct{}
 	allDone                 chan struct{}
-	closed                  atomicBool
+	closed                  AtomicBool
 }
 
 func NewLimiter(limit int) *Limiter {
@@ -32,7 +32,7 @@ func NewLimiter(limit int) *Limiter {
 		pool:                    make(chan struct{}, limit),
 		goroutineDone:           make(chan struct{}),
 		allDone:                 make(chan struct{}),
-		closed:                  atomicBool{},
+		closed:                  AtomicBool{},
 	}
 
 	go l.run()
@@ -53,17 +53,18 @@ func (l *Limiter) Done() {
 }
 
 func (l *Limiter) Wait() {
-	// set l.closed=true for function run would know
-	// that no more goroutines will be added
 	l.closed.Set(true)
 
-	// wait until pool is empty
 	<-l.allDone
 
-	// close every channel
-	// close(l.goroutineDone)
-	// close(l.pool)
-	// close(l.allDone)
+	close(l.goroutineDone)
+	close(l.pool)
+	close(l.allDone)
+}
+
+func (l *Limiter) RunningGorountinesCount() int {
+	count := atomic.LoadInt32(&l.runningGorountinesCount)
+	return int(count)
 }
 
 func (l *Limiter) run() {
